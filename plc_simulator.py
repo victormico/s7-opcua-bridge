@@ -5,6 +5,8 @@ This script starts a Snap7 server that simulates a real S7 PLC.
 It defines Data Block DB1 with 100 bytes and updates in real time:
   - Bytes 0-3:  Temperature (4-byte IEEE 754 float, big-endian)
   - Bytes 4-7:  Piece counter (4-byte unsigned integer, big-endian)
+    - Byte 8 bit 0: Machine running (bool)
+    - Byte 8 bit 1: Alarm active (bool)
 """
 
 import asyncio
@@ -103,6 +105,8 @@ class PLCSimulator:
 
         - Bytes 0-3: Temperature (IEEE 754 float), oscillates between 18.0 and 28.0 °C.
         - Bytes 4-7: Piece counter (uint32), incremented by 1 each cycle.
+        - Byte 8 bit 0: machine running (toggles every cycle).
+        - Byte 8 bit 1: alarm active (True when temperature > 27.0 °C).
         """
         t = 0.0
         while self._running:
@@ -119,10 +123,23 @@ class PLCSimulator:
             for i, b in enumerate(counter_bytes):
                 self._db_data[4 + i] = b
 
+            # Digital states packed in byte 8
+            machine_running = (self._piece_counter % 2) == 0
+            alarm_active = temperature > 27.0
+
+            digital_byte = 0
+            if machine_running:
+                digital_byte |= (1 << 0)
+            if alarm_active:
+                digital_byte |= (1 << 1)
+            self._db_data[8] = digital_byte
+
             logger.debug(
-                "Simulated PLC -> Temperature: %.2f °C | Counter: %d",
+                "Simulated PLC -> Temperature: %.2f °C | Counter: %d | Running: %s | Alarm: %s",
                 temperature,
                 self._piece_counter,
+                machine_running,
+                alarm_active,
             )
 
             self._piece_counter += 1

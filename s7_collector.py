@@ -8,6 +8,8 @@ that the rest of the system can consume.
 Values read:
   - temperature:    float (DB1 bytes 0-3)
   - piece_counter:  int   (DB1 bytes 4-7)
+    - machine_running: bool (DB1 byte 8, bit 0)
+    - alarm_active:    bool (DB1 byte 8, bit 1)
 """
 
 import asyncio
@@ -17,6 +19,7 @@ from typing import Any
 
 import snap7
 from snap7.error import S7Error
+from tag_config import TAG_CONFIG
 
 # Module logger
 logger = logging.getLogger("s7_collector")
@@ -24,12 +27,38 @@ logger = logging.getLogger("s7_collector")
 # Data Block number to read
 DB_NUMBER = 1
 
-# Byte offset and size of each variable inside DB1
-_TEMP_OFFSET = 0
-_TEMP_SIZE = 4  # 4-byte float
+def get_bit(byte_data: int, bit_index: int) -> bool:
+    """
+    Extract one bit from a byte.
 
-_COUNTER_OFFSET = 4
-_COUNTER_SIZE = 4  # 4-byte uint32
+    Args:
+        byte_data: Byte value (0..255).
+        bit_index: Bit index (0..7), where 0 is LSB.
+
+    Returns:
+        True if the bit is 1, else False.
+    """
+    if not 0 <= bit_index <= 7:
+        raise ValueError("bit_index must be in range 0..7")
+    return bool((byte_data >> bit_index) & 0x01)
+
+
+def _tag_size_bytes(config: dict[str, int | str]) -> int:
+    """Return the number of bytes needed for a tag at its starting offset."""
+    data_type = config["data_type"]
+    if data_type == "float":
+        return 4
+    if data_type == "uint32":
+        return 4
+    if data_type == "bool":
+        return 1
+    raise ValueError(f"Unsupported data_type: {data_type}")
+
+
+DB1_READ_SIZE = max(
+    int(config["byte_offset"]) + _tag_size_bytes(config)
+    for config in TAG_CONFIG.values()
+)
 
 
 class S7Collector:
@@ -61,10 +90,7 @@ class S7Collector:
         self._client: snap7.client.Client | None = None
 
         # Latest values read from the PLC; None means the value is invalid
-        self.data: dict[str, Any] = {
-            "temperature": None,
-            "piece_counter": None,
-        }
+        self.data: dict[str, Any] = {key: None for key in TAG_CONFIG}
 
         # Controls whether the periodic read loop is active
         self._running = False
@@ -127,31 +153,37 @@ class S7Collector:
             return False
 
         try:
-            # Read bytes 0-7 from DB1 (temperature + piece counter)
+            # Read bytes required by all configured tags.
             raw = await asyncio.get_event_loop().run_in_executor(
                 None,
                 lambda: self._client.db_read(  # type: ignore[union-attr]
                     DB_NUMBER,
-                    _TEMP_OFFSET,
-                    _TEMP_SIZE + _COUNTER_SIZE,
+                    0,
+                    DB1_READ_SIZE,
                 ),
             )
 
-            # Temperature: big-endian float in bytes 0-3
-            self.data["temperature"] = struct.unpack(
-                ">f", raw[_TEMP_OFFSET : _TEMP_OFFSET + _TEMP_SIZE]
-            )[0]
+            for tag_name, config in TAG_CONFIG.items():
+                byte_offset = int(config["byte_offset"])
+                data_type = str(config["data_type"])
 
-            # Piece counter: big-endian uint32 in bytes 4-7
-            self.data["piece_counter"] = struct.unpack(
-                ">I",
-                raw[_COUNTER_OFFSET : _COUNTER_OFFSET + _COUNTER_SIZE],
-            )[0]
+                if data_type == "float":
+                    self.data[tag_name] = struct.unpack(
+                        ">f", raw[byte_offset : byte_offset + 4]
+                    )[0]
+                elif data_type == "uint32":
+                    self.data[tag_name] = struct.unpack(
+                        ">I", raw[byte_offset : byte_offset + 4]
+                    )[0]
+                elif data_type == "bool":
+                    bit_offset = int(config["bit_offset"])
+                    self.data[tag_name] = get_bit(raw[byte_offset], bit_offset)
+                else:
+                    raise ValueError(f"Unsupported data_type: {data_type}")
 
             logger.debug(
-                "Values read -> Temperature: %.2f °C | Piece counter: %d",
-                self.data["temperature"],
-                self.data["piece_counter"],
+                "Values read -> %s",
+                self.data,
             )
             return True
 

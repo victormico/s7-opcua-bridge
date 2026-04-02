@@ -36,7 +36,9 @@ Objects/
 └── Industrial_Unit/
     └── S7_PLC_1/
         ├── Temperature    (Float,  DB1 bytes 0-3)
-        └── Piece_Counter  (UInt32, DB1 bytes 4-7)
+        ├── Piece_Counter  (UInt32, DB1 bytes 4-7)
+        ├── Machine_Running (Boolean, DB1 byte 8 bit 0)
+        └── Alarm_Active    (Boolean, DB1 byte 8 bit 1)
 ```
 
 Namespace URI: `Arduino_Industrial_Gateway`
@@ -72,7 +74,10 @@ python main.py
 The bridge connects to `127.0.0.1:102` by default and exposes the OPC UA
 server at `opc.tcp://0.0.0.0:4840/arduino/gateway`.
 
-### 4. Connect to a real PLC
+The simulator/bridge default S7 port in this project is `1102` (non-privileged,
+no `sudo` needed).
+
+### 5. Connect to a real PLC
 
 ```bash
 python main.py --host 192.168.0.10 --port 102 --rack 0 --slot 1
@@ -88,7 +93,7 @@ S7-to-OPC UA Industrial Gateway
 
 options:
   --host HOST           IP address of the S7 PLC (default: 127.0.0.1)
-  --port PORT           TCP port of the S7 PLC (default: 102)
+    --port PORT           TCP port of the S7 PLC (default: 1102)
   --rack RACK           Rack number of the S7 PLC (default: 0)
   --slot SLOT           Slot number of the S7 PLC (default: 1)
   --opcua-port OPCUA_PORT
