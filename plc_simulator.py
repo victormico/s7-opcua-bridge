@@ -39,13 +39,13 @@ class PLCSimulator:
     simulated values in a background thread.
     """
 
-    def __init__(self, host: str = "0.0.0.0", port: int = 102):
+    def __init__(self, host: str = "0.0.0.0", port: int = 1102):
         """
         Initialise the simulator.
 
         Args:
             host: IP address the server will listen on.
-            port: TCP port (default 102, the S7 standard port).
+            port: TCP port (default 1102, the S7 standard port).
         """
         self.host = host
         self.port = port

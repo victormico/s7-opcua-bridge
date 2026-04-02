@@ -11,7 +11,7 @@ Usage:
     python main.py [--host HOST] [--port PORT] [--opcua-port OPCUA_PORT]
 
 When run without arguments it connects to the local simulator
-(127.0.0.1:102) and exposes the OPC UA server on port 4840.
+(127.0.0.1:1102) and exposes the OPC UA server on port 4840.
 """
 
 import argparse
@@ -68,7 +68,7 @@ async def bridge_loop(
 
 async def main(
     plc_host: str = "127.0.0.1",
-    plc_port: int = 102,
+    plc_port: int = 1102,
     plc_rack: int = 0,
     plc_slot: int = 1,
     opcua_port: int = 4840,
@@ -103,7 +103,7 @@ async def main(
         )
 
         # Register signal handlers for a clean shutdown
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
 
         def _shutdown(sig: signal.Signals) -> None:
             logger.info("Signal %s received. Stopping bridge...", sig.name)
@@ -139,8 +139,8 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--port",
         type=int,
-        default=102,
-        help="TCP port of the S7 PLC (default: 102)",
+        default=1102,
+        help="TCP port of the S7 PLC (default: 1102)",
     )
     parser.add_argument(
         "--rack",

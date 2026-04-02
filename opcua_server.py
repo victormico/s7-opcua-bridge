@@ -94,9 +94,10 @@ class OPCUAGateway:
         Create the OPC UA object tree:
         Objects -> Industrial_Unit -> S7_PLC_1 -> Variables
         """
+        # Get the Objects folder (standard OPC UA root)
         objects_node = self._server.get_objects_node()
 
-        # Create Industrial_Unit
+        # Create Industrial_Unit under Objects
         industrial_unit = await objects_node.add_object(
             self._ns_idx, "Industrial_Unit"
         )
@@ -147,11 +148,13 @@ class OPCUAGateway:
         """
         for data_key, node in self._nodes.items():
             value = data.get(data_key)
+            now = ua.DateTime.utcnow()
 
             if value is None:
                 # Bad status: PLC is not responding or connection is lost
                 dv = DataValue(
-                    StatusCode_=StatusCode(BAD_STATUS_CODE)
+                    StatusCode_=StatusCode(BAD_STATUS_CODE),
+                    SourceTimestamp=now,
                 )
             else:
                 # Good status: valid value
@@ -159,6 +162,7 @@ class OPCUAGateway:
                 dv = DataValue(
                     Value=Variant(value, variant_type),
                     StatusCode_=StatusCode(ua.StatusCodes.Good),
+                    SourceTimestamp=now,
                 )
 
             await node.write_value(dv)
