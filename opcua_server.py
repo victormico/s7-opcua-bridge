@@ -19,6 +19,7 @@ from typing import Any
 
 from asyncua import Node, Server, ua
 from asyncua.ua import DataValue, StatusCode, Variant, VariantType
+from tag_config import TAG_CONFIG
 
 # Module logger
 logger = logging.getLogger("opcua_server")
@@ -26,10 +27,27 @@ logger = logging.getLogger("opcua_server")
 # OPC UA namespace URI for this gateway
 NAMESPACE_URI = "Arduino_Industrial_Gateway"
 
+_TYPE_TO_VARIANT: dict[str, VariantType] = {
+    "float": VariantType.Float,
+    "uint32": VariantType.UInt32,
+    "bool": VariantType.Boolean,
+}
+
+_DISPLAY_NAMES: dict[str, str] = {
+    "temperature": "Temperature",
+    "piece_counter": "Piece_Counter",
+    "machine_running": "Machine_Running",
+    "alarm_active": "Alarm_Active",
+}
+
+
 # Mapping: data dictionary key -> (OPC UA node name, VariantType)
 NODE_DEFINITIONS: dict[str, tuple[str, VariantType]] = {
-    "temperature": ("Temperature", VariantType.Float),
-    "piece_counter": ("Piece_Counter", VariantType.UInt32),
+    tag_name: (
+        _DISPLAY_NAMES.get(tag_name, tag_name),
+        _TYPE_TO_VARIANT[str(config["data_type"])],
+    )
+    for tag_name, config in TAG_CONFIG.items()
 }
 
 # Default initial values used when creating variable nodes
@@ -37,6 +55,7 @@ NODE_DEFINITIONS: dict[str, tuple[str, VariantType]] = {
 _DEFAULT_VALUES: dict[VariantType, object] = {
     VariantType.Float: 0.0,
     VariantType.UInt32: 0,
+    VariantType.Boolean: False,
 }
 
 

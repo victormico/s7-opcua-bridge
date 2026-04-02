@@ -19,7 +19,7 @@ from unittest.mock import MagicMock
 sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(__file__)))
 
 from plc_simulator import PLCSimulator, DB_NUMBER, DB_SIZE
-from s7_collector import S7Collector
+from s7_collector import S7Collector, get_bit
 
 
 # ---------------------------------------------------------------------------
@@ -45,7 +45,9 @@ class TestPLCSimulator(unittest.TestCase):
         self.simulator.start()
         time.sleep(0.2)
         # Simulation thread should be alive
-        self.assertTrue(self.simulator._sim_thread.is_alive())
+        sim_thread = self.simulator._sim_thread
+        assert sim_thread is not None
+        self.assertTrue(sim_thread.is_alive())
         self.simulator.stop()
         # _running flag should be cleared
         self.assertFalse(self.simulator._running)
@@ -86,14 +88,26 @@ class TestS7Collector(unittest.TestCase):
         """Initial values must be None before any read has occurred."""
         self.assertIsNone(self.collector.data["temperature"])
         self.assertIsNone(self.collector.data["piece_counter"])
+        self.assertIsNone(self.collector.data["machine_running"])
+        self.assertIsNone(self.collector.data["alarm_active"])
+
+    def test_get_bit_helper(self) -> None:
+        """get_bit must return expected bit values from a byte."""
+        self.assertTrue(get_bit(0b00000001, 0))
+        self.assertFalse(get_bit(0b00000001, 1))
+        self.assertTrue(get_bit(0b00000010, 1))
 
     def test_mark_bad_quality(self) -> None:
         """_mark_bad_quality must set all values to None."""
         self.collector.data["temperature"] = 23.0
         self.collector.data["piece_counter"] = 5
+        self.collector.data["machine_running"] = True
+        self.collector.data["alarm_active"] = False
         self.collector._mark_bad_quality()
         self.assertIsNone(self.collector.data["temperature"])
         self.assertIsNone(self.collector.data["piece_counter"])
+        self.assertIsNone(self.collector.data["machine_running"])
+        self.assertIsNone(self.collector.data["alarm_active"])
 
     def test_connect_failure_marks_disconnected(self) -> None:
         """A failed connection attempt must leave _connected as False."""
@@ -112,9 +126,10 @@ class TestS7Collector(unittest.TestCase):
         # Prepare a bytearray that simulates a PLC response
         temp_expected = 25.5
         counter_expected = 42
-        raw = bytearray(8)
+        raw = bytearray(9)
         raw[0:4] = struct.pack(">f", temp_expected)
         raw[4:8] = struct.pack(">I", counter_expected)
+        raw[8] = 0b00000001  # machine_running=True, alarm_active=False
 
         # Mock the Snap7 client
         mock_client = MagicMock()
@@ -128,6 +143,8 @@ class TestS7Collector(unittest.TestCase):
         self.assertTrue(result)
         self.assertAlmostEqual(self.collector.data["temperature"], temp_expected, places=4)
         self.assertEqual(self.collector.data["piece_counter"], counter_expected)
+        self.assertTrue(self.collector.data["machine_running"])
+        self.assertFalse(self.collector.data["alarm_active"])
 
     def test_read_db1_marks_bad_quality_on_exception(self) -> None:
         """An exception during reading must mark all values as None."""
@@ -143,6 +160,7 @@ class TestS7Collector(unittest.TestCase):
 
         self.assertFalse(result)
         self.assertIsNone(self.collector.data["temperature"])
+        self.assertIsNone(self.collector.data["machine_running"])
         self.assertFalse(self.collector._connected)
 
     def test_stop_sets_running_false(self) -> None:
@@ -178,6 +196,8 @@ class TestSimulatorCollectorIntegration(unittest.TestCase):
             self.assertTrue(ok, "DB1 read failed")
             self.assertIsNotNone(collector.data["temperature"])
             self.assertIsNotNone(collector.data["piece_counter"])
+            self.assertIsNotNone(collector.data["machine_running"])
+            self.assertIsNotNone(collector.data["alarm_active"])
             # Temperature must be within the expected range
             self.assertGreaterEqual(collector.data["temperature"], 17.9)
             self.assertLessEqual(collector.data["temperature"], 28.1)
@@ -213,13 +233,31 @@ class TestOPCUAGateway(unittest.IsolatedAsyncioTestCase):
 
         gw = self.OPCUAGateway(endpoint="opc.tcp://127.0.0.1:14841/test")
         async with gw:
-            data = {"temperature": 24.3, "piece_counter": 10}
+            data = {
+                "temperature": 24.3,
+                "piece_counter": 10,
+                "machine_running": True,
+                "alarm_active": False,
+            }
             await gw.update_nodes(data)
 
             temp_node = gw._nodes["temperature"]
             dv = await temp_node.read_data_value()
-            self.assertEqual(dv.StatusCode_.value, ua.StatusCodes.Good)
-            self.assertAlmostEqual(dv.Value.Value, 24.3, places=3)
+            status = dv.StatusCode_
+            value = dv.Value
+            assert status is not None
+            assert value is not None
+            self.assertEqual(status.value, ua.StatusCodes.Good)
+            self.assertAlmostEqual(value.Value, 24.3, places=3)
+
+            running_node = gw._nodes["machine_running"]
+            running_dv = await running_node.read_data_value()
+            running_status = running_dv.StatusCode_
+            running_value = running_dv.Value
+            assert running_status is not None
+            assert running_value is not None
+            self.assertEqual(running_status.value, ua.StatusCodes.Good)
+            self.assertTrue(running_value.Value)
 
     async def test_update_nodes_bad_status_on_none(self) -> None:
         """A None value must result in a Bad StatusCode on the node."""
@@ -227,13 +265,20 @@ class TestOPCUAGateway(unittest.IsolatedAsyncioTestCase):
 
         gw = self.OPCUAGateway(endpoint="opc.tcp://127.0.0.1:14842/test")
         async with gw:
-            data = {"temperature": None, "piece_counter": None}
+            data = {
+                "temperature": None,
+                "piece_counter": None,
+                "machine_running": None,
+                "alarm_active": None,
+            }
             await gw.update_nodes(data)
 
             temp_node = gw._nodes["temperature"]
             # Pass raise_on_bad_status=False so we can inspect the status code
             dv = await temp_node.read_data_value(raise_on_bad_status=False)
-            self.assertNotEqual(dv.StatusCode_.value, ua.StatusCodes.Good)
+            status = dv.StatusCode_
+            assert status is not None
+            self.assertNotEqual(status.value, ua.StatusCodes.Good)
 
 
 if __name__ == "__main__":
