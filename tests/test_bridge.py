@@ -97,13 +97,13 @@ class TestS7Collector(unittest.TestCase):
 
     def test_connect_failure_marks_disconnected(self) -> None:
         """A failed connection attempt must leave _connected as False."""
-        result = asyncio.get_event_loop().run_until_complete(self.collector.connect())
+        result = asyncio.run(self.collector.connect())
         self.assertFalse(result)
         self.assertFalse(self.collector._connected)
 
     def test_read_db1_without_connection_returns_false(self) -> None:
         """Reading without a connection must return False and mark bad quality."""
-        result = asyncio.get_event_loop().run_until_complete(self.collector.read_db1())
+        result = asyncio.run(self.collector.read_db1())
         self.assertFalse(result)
         self.assertIsNone(self.collector.data["temperature"])
 
@@ -123,7 +123,7 @@ class TestS7Collector(unittest.TestCase):
         self.collector._client = mock_client
         self.collector._connected = True
 
-        result = asyncio.get_event_loop().run_until_complete(self.collector.read_db1())
+        result = asyncio.run(self.collector.read_db1())
 
         self.assertTrue(result)
         self.assertAlmostEqual(self.collector.data["temperature"], temp_expected, places=4)
@@ -139,7 +139,7 @@ class TestS7Collector(unittest.TestCase):
         self.collector._client = mock_client
         self.collector._connected = True
 
-        result = asyncio.get_event_loop().run_until_complete(self.collector.read_db1())
+        result = asyncio.run(self.collector.read_db1())
 
         self.assertFalse(result)
         self.assertIsNone(self.collector.data["temperature"])
@@ -183,7 +183,7 @@ class TestSimulatorCollectorIntegration(unittest.TestCase):
             self.assertLessEqual(collector.data["temperature"], 28.1)
             await collector.disconnect()
 
-        asyncio.get_event_loop().run_until_complete(_run())
+        asyncio.run(_run())
         simulator.stop()
 
 

@@ -43,19 +43,27 @@ Namespace URI: `Arduino_Industrial_Gateway`
 
 ## Quick start
 
-### 1. Install dependencies
+### 1. Create and activate a virtual environment (Linux)
 
 ```bash
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
 ```
 
-### 2. Start the PLC simulator (terminal 1)
+### 2. Install dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+### 3. Start the PLC simulator (terminal 1)
 
 ```bash
 python plc_simulator.py
 ```
 
-### 3. Start the bridge (terminal 2)
+### 4. Start the bridge (terminal 2)
 
 ```bash
 python main.py
@@ -90,6 +98,13 @@ options:
 ## Running the tests
 
 ```bash
+python -m pytest tests/ -v
+```
+
+If your virtual environment is not active yet:
+
+```bash
+source .venv/bin/activate
 python -m pytest tests/ -v
 ```
 
