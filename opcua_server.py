@@ -41,7 +41,7 @@ _DEFAULT_VALUES: dict[VariantType, object] = {
 
 
 # OPC UA status code used when data is unavailable (connection lost)
-BAD_STATUS_CODE = ua.StatusCodes.BadNoData
+BAD_STATUS_CODE = ua.UInt32(ua.StatusCodes.BadNoData)
 
 
 class OPCUAGateway:
@@ -161,7 +161,7 @@ class OPCUAGateway:
                 _, variant_type = NODE_DEFINITIONS[data_key]
                 dv = DataValue(
                     Value=Variant(value, variant_type),
-                    StatusCode_=StatusCode(ua.StatusCodes.Good),
+                    StatusCode_=StatusCode(ua.UInt32(ua.StatusCodes.Good)),
                     SourceTimestamp=now,
                 )
 
