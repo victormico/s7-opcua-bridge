@@ -1,0 +1,27 @@
+services:
+  s7-simulator:
+    build:
+      context: .
+      dockerfile: services/s7_simulator/Dockerfile
+    image: s7-opcua-bridge-s7-simulator:latest
+    environment:
+      S7_SIM_HOST: ${S7_SIM_HOST:-0.0.0.0}
+      S7_SIM_PORT: ${S7_SIM_PORT:-1102}
+    ports:
+      - "${S7_SIM_PORT:-1102}:1102"
+
+  gateway:
+    build:
+      context: .
+      dockerfile: services/gateway/Dockerfile
+    image: s7-opcua-bridge-gateway:latest
+    depends_on:
+      - s7-simulator
+    environment:
+      PLC_IP: ${PLC_IP:-s7-simulator}
+      PLC_PORT: ${PLC_PORT:-1102}
+      PLC_RACK: ${PLC_RACK:-0}
+      PLC_SLOT: ${PLC_SLOT:-1}
+      OPCUA_PORT: ${OPCUA_PORT:-4840}
+    ports:
+      - "${OPCUA_PORT:-4840}:4840"

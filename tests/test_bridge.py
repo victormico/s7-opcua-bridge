@@ -10,16 +10,19 @@ Covers the main components:
 
 import asyncio
 import struct
-import sys
 import time
 import unittest
 from unittest.mock import MagicMock
 
-# Add the repository root to the path so imports work in all environments
-sys.path.insert(0, __import__("os").path.dirname(__import__("os").path.dirname(__file__)))
+import os
+import sys
 
-from plc_simulator import PLCSimulator, DB_NUMBER, DB_SIZE
-from s7_collector import S7Collector, get_bit
+repo_root = os.path.dirname(os.path.dirname(__file__))
+sys.path.insert(0, repo_root)
+
+from services.gateway.opcua_server import NODE_DEFINITIONS, NAMESPACE_URI, OPCUAGateway
+from services.gateway.s7_collector import S7Collector, get_bit
+from services.s7_simulator.main import DB_NUMBER, DB_SIZE, PLCSimulator
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +218,6 @@ class TestOPCUAGateway(unittest.IsolatedAsyncioTestCase):
     """Async tests for the OPC UA server."""
 
     async def asyncSetUp(self) -> None:
-        from opcua_server import OPCUAGateway, NAMESPACE_URI, NODE_DEFINITIONS
         self.OPCUAGateway = OPCUAGateway
         self.NAMESPACE_URI = NAMESPACE_URI
         self.NODE_DEFINITIONS = NODE_DEFINITIONS
