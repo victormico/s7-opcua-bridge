@@ -7,8 +7,7 @@ import logging
 import struct
 from typing import Any
 
-import snap7
-from snap7.error import S7Error
+import snap7 as s7
 
 from .tag_config import TAG_CONFIG
 
@@ -52,7 +51,7 @@ class S7Collector:
         self.rack = rack
         self.slot = slot
         self.port = port
-        self._client: snap7.client.Client | None = None
+        self._client: s7.Client | None = None
         self.data: dict[str, Any] = {key: None for key in TAG_CONFIG}
         self._running = False
         self._connected = False
@@ -63,35 +62,35 @@ class S7Collector:
             self._connected = True
             logger.info("Connected to PLC at %s:%d", self.host, self.port)
             return True
-        except (S7Error, OSError, RuntimeError) as exc:
+        except Exception as exc:
             self._connected = False
             logger.warning("Could not connect to PLC: %s", exc)
             return False
 
     def _do_connect(self) -> None:
-        self._client = snap7.client.Client()
+        self._client = s7.Client()
         self._client.connect(self.host, self.rack, self.slot, self.port)
 
     async def disconnect(self) -> None:
-        if self._client is not None:
+        client = self._client
+        if client is not None:
             try:
-                await asyncio.get_running_loop().run_in_executor(
-                    None, self._client.disconnect
-                )
-            except (S7Error, OSError, RuntimeError) as exc:
+                await asyncio.get_running_loop().run_in_executor(None, client.disconnect)
+            except Exception as exc:
                 logger.debug("Error while disconnecting: %s", exc)
         self._connected = False
         self._client = None
 
     async def read_db1(self) -> bool:
-        if not self._connected or self._client is None:
+        client = self._client
+        if not self._connected or client is None:
             self._mark_bad_quality()
             return False
 
         try:
             raw = await asyncio.get_running_loop().run_in_executor(
                 None,
-                lambda: self._client.db_read(DB_NUMBER, 0, DB1_READ_SIZE),
+                lambda: client.db_read(DB_NUMBER, 0, DB1_READ_SIZE),
             )
 
             for tag_name, config in TAG_CONFIG.items():
@@ -115,7 +114,7 @@ class S7Collector:
             logger.debug("Values read -> %s", self.data)
             return True
 
-        except (S7Error, OSError, RuntimeError, struct.error) as exc:
+        except Exception as exc:
             logger.warning("Error reading DB1: %s", exc)
             self._connected = False
             self._mark_bad_quality()

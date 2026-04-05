@@ -134,7 +134,7 @@ class TestS7Collector(unittest.TestCase):
         raw[4:8] = struct.pack(">I", counter_expected)
         raw[8] = 0b00000001  # machine_running=True, alarm_active=False
 
-        # Mock the Snap7 client
+        # Mock the S7 client
         mock_client = MagicMock()
         mock_client.db_read.return_value = raw
 
@@ -151,10 +151,8 @@ class TestS7Collector(unittest.TestCase):
 
     def test_read_db1_marks_bad_quality_on_exception(self) -> None:
         """An exception during reading must mark all values as None."""
-        from snap7.error import S7Error
-
         mock_client = MagicMock()
-        mock_client.db_read.side_effect = S7Error("connection lost")
+        mock_client.db_read.side_effect = RuntimeError("connection lost")
 
         self.collector._client = mock_client
         self.collector._connected = True
