@@ -23,14 +23,21 @@ s7-opcua-bridge/
 ├── services/
 │   ├── gateway/
 │   │   ├── Dockerfile
+│   │   ├── config.json
 │   │   ├── main.py
+│   │   ├── config.py
 │   │   ├── opcua_server.py
 │   │   ├── s7_collector.py
-│   │   ├── tag_config.py
 │   │   └── requirements.txt
+│   ├── dashboard/
+│   │   ├── Dockerfile
+│   │   ├── app.js
+│   │   ├── index.html
+│   │   └── styles.css
 │   └── s7_simulator/
 │       ├── Dockerfile
 │       ├── main.py
+│       ├── tag_config.py
 │       └── requirements.txt
 ├── docker-compose.yml
 ├── requirements.txt
@@ -91,6 +98,22 @@ python -m services.gateway.main
 The bridge connects to `127.0.0.1:1102` by default and exposes the OPC UA
 server at `opc.tcp://0.0.0.0:4840/arduino/gateway`.
 
+The gateway also starts a small HTTP API on port `8080` for dashboard tooling:
+
+- `POST /discover` returns the PLC mapping metadata and the gateway tag list
+- `POST /save-config` writes a JSON configuration file next to the gateway code
+- `GET /status` reports PLC/OPC UA health for a dashboard indicator
+
+The gateway reads startup defaults from `services/gateway/config.json` when the
+file is present, so the dashboard can prefill and persist connection settings.
+
+In Docker, the gateway config is stored in a persistent named volume mounted at
+`/config/config.json`, and saving through the dashboard triggers a gateway
+reload so OPC UA node names update immediately.
+
+The frontend dashboard is available as a separate service at `http://localhost:3000`
+when started through Docker Compose.
+
 The simulator/bridge default S7 port in this project is `1102` (non-privileged,
 no `sudo` needed).
 
@@ -105,6 +128,8 @@ python -m services.gateway.main --host 192.168.0.10 --port 102 --rack 0 --slot 1
 ```bash
 docker compose up --build
 ```
+
+This brings up the simulator, gateway, and dashboard together.
 
 The gateway uses `PLC_IP=s7-simulator` inside Docker, while local IDE runs can
 keep using `PLC_IP=127.0.0.1` or the `--host` flag.

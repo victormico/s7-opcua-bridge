@@ -14,14 +14,19 @@ import time
 import snap7
 from snap7.type import SrvArea
 
+from .tag_config import TAG_CONFIG
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
 logger = logging.getLogger("plc_simulator")
 
-DB_SIZE = 100
 DB_NUMBER = 1
+DB_SIZE = max(
+    int(config["byte_offset"]) + (4 if config["data_type"] in {"float", "uint32"} else 1)
+    for config in TAG_CONFIG.values()
+)
 
 __all__ = ["DB_NUMBER", "DB_SIZE", "PLCSimulator", "main"]
 

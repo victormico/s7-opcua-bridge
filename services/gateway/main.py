@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import logging
 import os
 import signal
+from pathlib import Path
+
 
 from .opcua_server import OPCUAGateway
+from .gateway_api import set_config_reload_event, start_api, stop_api, update_status
+from .config import get_config_path, get_plc_settings, get_variable_mappings, load_gateway_config
 from .s7_collector import S7Collector, connect_with_retry
 
 logging.basicConfig(
@@ -33,21 +38,39 @@ def _default_int(name: str, fallback: int) -> int:
         return fallback
 
 
+def _load_config() -> dict[str, object]:
+    try:
+        return load_gateway_config(get_config_path())
+    except (OSError, json.JSONDecodeError) as exc:
+        logger.warning("Ignoring invalid config file %s: %s", get_config_path(), exc)
+        return {}
+
+
 async def bridge_loop(
     collector: S7Collector,
     gateway: OPCUAGateway,
     interval: float = READ_INTERVAL,
+    reload_event: asyncio.Event | None = None,
 ) -> None:
     collector._running = True
     logger.info("Bridge loop started (interval=%.1f s).", interval)
 
     while True:
+        if reload_event is not None and reload_event.is_set():
+            raise RuntimeError("Config reload requested")
+
         if not collector._connected:
             logger.warning("PLC disconnected. Attempting to reconnect...")
             await connect_with_retry(collector, delay=5.0)
+            update_status(plc_connected=collector._connected)
 
         await collector.read_db1()
         await gateway.update_nodes(collector.data)
+        update_status(
+            plc_connected=collector._connected,
+            opcua_running=True,
+            last_error=None,
+        )
         await asyncio.sleep(interval)
 
 
@@ -58,42 +81,94 @@ async def main(
     plc_slot: int | None = None,
     opcua_port: int | None = None,
 ) -> None:
-    plc_host = plc_host or _default_plc_host()
-    plc_port = plc_port if plc_port is not None else _default_int("PLC_PORT", 1102)
-    plc_rack = plc_rack if plc_rack is not None else _default_int("PLC_RACK", 0)
-    plc_slot = plc_slot if plc_slot is not None else _default_int("PLC_SLOT", 1)
-    opcua_port = opcua_port if opcua_port is not None else _default_int("OPCUA_PORT", 4840)
+    config = _load_config()
+    plc_config = get_plc_settings(config)
+    variable_mappings = get_variable_mappings(config)
+
+    plc_host = plc_host or os.getenv("PLC_IP") or str(plc_config.get("host", _default_plc_host()))
+    plc_port = (
+        plc_port
+        if plc_port is not None
+        else _default_int("PLC_PORT", int(plc_config.get("port", 1102)))
+    )
+    plc_rack = (
+        plc_rack
+        if plc_rack is not None
+        else _default_int("PLC_RACK", int(plc_config.get("rack", 0)))
+    )
+    plc_slot = (
+        plc_slot
+        if plc_slot is not None
+        else _default_int("PLC_SLOT", int(plc_config.get("slot", 1)))
+    )
+    opcua_port = (
+        opcua_port
+        if opcua_port is not None
+        else _default_int("OPCUA_PORT", int(config.get("opcua_port", 4840)))
+    )
 
     opcua_endpoint = f"opc.tcp://0.0.0.0:{opcua_port}/arduino/gateway"
-    collector = S7Collector(host=plc_host, rack=plc_rack, slot=plc_slot, port=plc_port)
+    loop = asyncio.get_running_loop()
+    api_runner = await start_api()
+    current_collector: S7Collector | None = None
 
-    await collector.connect()
+    def _shutdown(sig: signal.Signals) -> None:
+        logger.info("Signal %s received. Stopping bridge...", sig.name)
+        if current_collector is not None:
+            current_collector.stop()
+        for task in asyncio.all_tasks(loop):
+            task.cancel()
 
-    async with OPCUAGateway(endpoint=opcua_endpoint) as gateway:
-        logger.info(
-            "Bridge started. PLC=%s:%d | OPC UA endpoint=%s",
-            plc_host,
-            plc_port,
-            opcua_endpoint,
-        )
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, _shutdown, sig)
 
-        loop = asyncio.get_running_loop()
+    try:
+        while True:
+            config_reload_event = asyncio.Event()
+            set_config_reload_event(config_reload_event)
 
-        def _shutdown(sig: signal.Signals) -> None:
-            logger.info("Signal %s received. Stopping bridge...", sig.name)
-            collector.stop()
-            for task in asyncio.all_tasks(loop):
-                task.cancel()
+            config = _load_config()
+            plc_config = get_plc_settings(config)
+            variable_mappings = get_variable_mappings(config)
 
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, _shutdown, sig)
+            current_collector = S7Collector(
+                host=plc_host or os.getenv("PLC_IP") or str(plc_config.get("host", _default_plc_host())),
+                rack=plc_rack if plc_rack is not None else _default_int("PLC_RACK", int(plc_config.get("rack", 0))),
+                slot=plc_slot if plc_slot is not None else _default_int("PLC_SLOT", int(plc_config.get("slot", 1))),
+                port=plc_port if plc_port is not None else _default_int("PLC_PORT", int(plc_config.get("port", 1102))),
+                variable_mappings=variable_mappings,
+            )
 
-        try:
-            await bridge_loop(collector, gateway, interval=READ_INTERVAL)
-        except asyncio.CancelledError:
-            logger.info("Bridge stopped cleanly.")
-        finally:
-            await collector.disconnect()
+            await current_collector.connect()
+            update_status(plc_connected=current_collector._connected, opcua_running=False, last_error=None)
+
+            try:
+                async with OPCUAGateway(endpoint=opcua_endpoint, variable_mappings=variable_mappings) as gateway:
+                    logger.info(
+                        "Bridge started. PLC=%s:%d | OPC UA endpoint=%s",
+                        current_collector.host,
+                        current_collector.port,
+                        opcua_endpoint,
+                    )
+                    await bridge_loop(
+                        current_collector,
+                        gateway,
+                        interval=READ_INTERVAL,
+                        reload_event=config_reload_event,
+                    )
+            except RuntimeError as exc:
+                if str(exc) != "Config reload requested":
+                    raise
+                logger.info("Gateway config changed. Reloading OPC UA nodes...")
+                continue
+            finally:
+                await current_collector.disconnect()
+                update_status(plc_connected=False, opcua_running=False, last_error=None)
+    except asyncio.CancelledError:
+        logger.info("Bridge stopped cleanly.")
+    finally:
+        set_config_reload_event(None)
+        await stop_api(api_runner)
 
 
 def _parse_args() -> argparse.Namespace:

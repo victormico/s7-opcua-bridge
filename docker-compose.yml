@@ -23,5 +23,22 @@ services:
       PLC_RACK: ${PLC_RACK:-0}
       PLC_SLOT: ${PLC_SLOT:-1}
       OPCUA_PORT: ${OPCUA_PORT:-4840}
+      GATEWAY_CONFIG: ${GATEWAY_CONFIG:-/config/config.json}
+    volumes:
+      - gateway-config:/config
     ports:
       - "${OPCUA_PORT:-4840}:4840"
+      - "${GATEWAY_API_PORT:-8080}:8080"
+
+  dashboard:
+    build:
+      context: .
+      dockerfile: services/dashboard/Dockerfile
+    image: s7-opcua-bridge-dashboard:latest
+    depends_on:
+      - gateway
+    ports:
+      - "${DASHBOARD_PORT:-3000}:80"
+
+volumes:
+  gateway-config:
