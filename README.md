@@ -4,8 +4,8 @@ Industrial S7-to-OPCUA Edge Gateway
 ## Overview
 
 An open-source edge gateway that reads data from Siemens S7 PLCs and exposes
-it through an OPC UA server.  The system is designed to run on a Debian-based
-Linux distribution (e.g. on an Arduino UNO R4 WiFi or similar SBC).
+it through an OPC UA server. The project now supports both local IDE runs and
+containerized deployment so the simulator and gateway can be isolated cleanly.
 
 ## Architecture
 
@@ -20,13 +20,22 @@ Linux distribution (e.g. on an Arduino UNO R4 WiFi or similar SBC).
 
 ```
 s7-opcua-bridge/
-├── plc_simulator.py   # Mock Snap7 server – simulates a real S7 PLC
-├── s7_collector.py    # S7Collector – async client that reads DB1
-├── opcua_server.py    # OPCUAGateway – async OPC UA server
-├── main.py            # Main async loop (bridge entry point)
-├── requirements.txt   # Python dependencies
+├── services/
+│   ├── gateway/
+│   │   ├── Dockerfile
+│   │   ├── main.py
+│   │   ├── opcua_server.py
+│   │   ├── s7_collector.py
+│   │   ├── tag_config.py
+│   │   └── requirements.txt
+│   └── s7_simulator/
+│       ├── Dockerfile
+│       ├── main.py
+│       └── requirements.txt
+├── docker-compose.yml
+├── requirements.txt
 └── tests/
-    └── test_bridge.py # Unit and integration tests
+  └── test_bridge.py
 ```
 
 ## OPC UA node tree
@@ -59,19 +68,27 @@ python -m pip install --upgrade pip
 python -m pip install -r requirements.txt
 ```
 
+If you want to work on only one service in the IDE, use the service-specific
+dependency file instead:
+
+```bash
+python -m pip install -r services/gateway/requirements.txt
+python -m pip install -r services/s7-simulator/requirements.txt
+```
+
 ### 3. Start the PLC simulator (terminal 1)
 
 ```bash
-python plc_simulator.py
+python -m services.s7_simulator.main
 ```
 
 ### 4. Start the bridge (terminal 2)
 
 ```bash
-python main.py
+python -m services.gateway.main
 ```
 
-The bridge connects to `127.0.0.1:102` by default and exposes the OPC UA
+The bridge connects to `127.0.0.1:1102` by default and exposes the OPC UA
 server at `opc.tcp://0.0.0.0:4840/arduino/gateway`.
 
 The simulator/bridge default S7 port in this project is `1102` (non-privileged,
@@ -80,14 +97,32 @@ no `sudo` needed).
 ### 5. Connect to a real PLC
 
 ```bash
-python main.py --host 192.168.0.10 --port 102 --rack 0 --slot 1
+python -m services.gateway.main --host 192.168.0.10 --port 102 --rack 0 --slot 1
+```
+
+### Containerized run
+
+```bash
+docker compose up --build
+```
+
+The gateway uses `PLC_IP=s7-simulator` inside Docker, while local IDE runs can
+keep using `PLC_IP=127.0.0.1` or the `--host` flag.
+
+### ARM64 / Arduino UNO Q
+
+The Dockerfiles use `python:3.11-slim`, which is published for ARM64 and AMD64.
+For production images, build multi-arch artifacts with Buildx, for example:
+
+```bash
+docker buildx build --platform linux/arm64,linux/amd64 -t your-registry/s7-gateway ./services/gateway
 ```
 
 ### All command-line options
 
 ```
-usage: main.py [-h] [--host HOST] [--port PORT] [--rack RACK] [--slot SLOT]
-               [--opcua-port OPCUA_PORT]
+usage: python -m services.gateway.main [-h] [--host HOST] [--port PORT] [--rack RACK] [--slot SLOT]
+                                        [--opcua-port OPCUA_PORT]
 
 S7-to-OPC UA Industrial Gateway
 
@@ -112,6 +147,24 @@ If your virtual environment is not active yet:
 source .venv/bin/activate
 python -m pytest tests/ -v
 ```
+
+## Environment variables
+
+To configure the bridge and simulator, copy the sample environment file:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` with your actual settings.
+
+- `PLC_IP`: PLC host for the gateway (`127.0.0.1` locally, `s7-simulator` in Docker)
+- `PLC_PORT`: PLC port for the gateway (`1102` by default in this project)
+- `PLC_RACK` and `PLC_SLOT`: Siemens connection parameters
+- `OPCUA_PORT`: OPC UA server port (`4840` by default)
+- `S7_SIM_HOST` and `S7_SIM_PORT`: Simulator bind settings when run locally
+
+See [.env.example](.env.example) for a ready-to-copy sample configuration.
 
 ## Error handling
 
