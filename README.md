@@ -7,6 +7,43 @@ An open-source edge gateway that reads data from Siemens S7 PLCs and exposes
 it through an OPC UA server. The project now supports both local IDE runs and
 containerized deployment so the simulator and gateway can be isolated cleanly.
 
+## Visual Overview
+
+### Data flow
+
+```mermaid
+flowchart LR
+  PLC[S7 PLC]
+  SNAP7[Snap7]
+  PY[Python Logic]
+  AI[AI]
+  OPCUA[OPC UA]
+
+  PLC --> SNAP7 --> PY --> AI --> OPCUA
+```
+
+### Hardware connection
+
+```mermaid
+flowchart TB
+  PLC[S7 PLC]
+  UA[UaExpert OPC UA Client]
+  BROWSER[App Lab Dashboard]
+
+  subgraph EDGE[Arduino UNO Q]
+    GW[Gateway API]
+    COLLECTOR[Snap7 PLC collector]
+    LOGIC[Python mapping and AI logic]
+    SERVER[OPC UA server]
+  end
+
+  PLC -- S7 over Ethernet --> COLLECTOR
+  COLLECTOR --> LOGIC --> SERVER
+  BROWSER -- HTTP --> GW
+  GW --> LOGIC
+  UA -- OPC UA --> SERVER
+```
+
 ## Architecture
 
 | Layer | Technology |
@@ -15,6 +52,16 @@ containerized deployment so the simulator and gateway can be isolated cleanly.
 | S7 protocol | [python-snap7](https://github.com/gijzelaerr/python-snap7) |
 | OPC UA protocol | [asyncua](https://github.com/FreeOpcUa/opcua-asyncio) |
 | Concurrency | `asyncio` (non-blocking I/O) |
+
+## Visual Validation
+
+### App Lab dashboard interface
+
+![App Lab dashboard interface](docs/dashboard.png)
+
+### Final data validation in UaExpert
+
+![UaExpert validation showing live values and Good status](docs/ua-expert.png)
 
 ## Project structure
 
