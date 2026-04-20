@@ -108,42 +108,22 @@ Namespace URI: `Arduino_Industrial_Gateway`
 
 ## Quick start
 
-### 1. Create and activate a virtual environment (Linux)
+### 1. Start the full stack with Docker
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
+docker compose up --build
 ```
 
-### 2. Install dependencies
+This is the recommended path for the project. It brings up the simulator,
+gateway, and dashboard together.
 
-```bash
-python -m pip install -r requirements.txt
-```
+The gateway uses `PLC_IP=s7-simulator` inside Docker, while the dashboard is
+available at `http://localhost:3000`.
 
-If you want to work on only one service in the IDE, use the service-specific
-dependency file instead:
+### 2. Connect the dashboard and validate the data
 
-```bash
-python -m pip install -r services/gateway/requirements.txt
-python -m pip install -r services/s7-simulator/requirements.txt
-```
-
-### 3. Start the PLC simulator (terminal 1)
-
-```bash
-python -m services.s7_simulator.main
-```
-
-### 4. Start the bridge (terminal 2)
-
-```bash
-python -m services.gateway.main
-```
-
-The bridge connects to `127.0.0.1:1102` by default and exposes the OPC UA
-server at `opc.tcp://0.0.0.0:4840/arduino/gateway`.
+Open the dashboard, discover the PLC tags, save the mapping, and confirm the
+values in UaExpert.
 
 The gateway also starts a small HTTP API on port `8080` for dashboard tooling:
 
@@ -158,30 +138,58 @@ In Docker, the gateway config is stored in a persistent named volume mounted at
 `/config/config.json`, and saving through the dashboard triggers a gateway
 reload so OPC UA node names update immediately.
 
-The frontend dashboard is available as a separate service at `http://localhost:3000`
-when started through Docker Compose.
-
 The simulator/bridge default S7 port in this project is `1102` (non-privileged,
 no `sudo` needed).
 
-### 5. Connect to a real PLC
+### Development setup
+
+If you want to run the services from Python during local development, use the
+steps below.
+
+#### 1. Create and activate a virtual environment (Linux)
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+```
+
+#### 2. Install dependencies
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+If you want to work on only one service in the IDE, use the service-specific
+dependency file instead:
+
+```bash
+python -m pip install -r services/gateway/requirements.txt
+python -m pip install -r services/s7-simulator/requirements.txt
+```
+
+#### 3. Start the PLC simulator (terminal 1)
+
+```bash
+python -m services.s7_simulator.main
+```
+
+#### 4. Start the bridge (terminal 2)
+
+```bash
+python -m services.gateway.main
+```
+
+The bridge connects to `127.0.0.1:1102` by default and exposes the OPC UA
+server at `opc.tcp://0.0.0.0:4840/arduino/gateway`.
+
+#### 5. Connect to a real PLC
 
 ```bash
 python -m services.gateway.main --host 192.168.0.10 --port 102 --rack 0 --slot 1
 ```
 
-### Containerized run
-
-```bash
-docker compose up --build
-```
-
-This brings up the simulator, gateway, and dashboard together.
-
-The gateway uses `PLC_IP=s7-simulator` inside Docker, while local IDE runs can
-keep using `PLC_IP=127.0.0.1` or the `--host` flag.
-
-### ARM64 / Arduino UNO Q
+#### ARM64 / Arduino UNO Q
 
 The Dockerfiles use `python:3.11-slim`, which is published for ARM64 and AMD64.
 For production images, build multi-arch artifacts with Buildx, for example:
@@ -190,7 +198,7 @@ For production images, build multi-arch artifacts with Buildx, for example:
 docker buildx build --platform linux/arm64,linux/amd64 -t your-registry/s7-gateway ./services/gateway
 ```
 
-### All command-line options
+#### All command-line options
 
 ```
 usage: python -m services.gateway.main [-h] [--host HOST] [--port PORT] [--rack RACK] [--slot SLOT]
@@ -206,6 +214,12 @@ options:
   --opcua-port OPCUA_PORT
                         TCP port for the OPC UA server (default: 4840)
 ```
+
+## Development Notes
+
+The Python commands above are intended for local development, debugging, and
+service-level iteration in the IDE. For the end-to-end demo and the Hackster.io
+submission flow, use the Docker-first quick start.
 
 ## Running the tests
 
