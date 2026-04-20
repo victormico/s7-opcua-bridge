@@ -8,32 +8,18 @@ from typing import Any
 from asyncua import Node, Server, ua
 from asyncua.ua import DataValue, StatusCode, Variant, VariantType
 
-from .tag_config import TAG_CONFIG
+from .config import build_node_definitions, get_variable_mappings, load_gateway_config
 
 logger = logging.getLogger("opcua_server")
 
 NAMESPACE_URI = "Arduino_Industrial_Gateway"
 
-_TYPE_TO_VARIANT: dict[str, VariantType] = {
-    "float": VariantType.Float,
-    "uint32": VariantType.UInt32,
-    "bool": VariantType.Boolean,
-}
+_DEFAULT_CONFIG = load_gateway_config()
+_DEFAULT_VARIABLE_MAPPINGS = get_variable_mappings(_DEFAULT_CONFIG)
 
-_DISPLAY_NAMES: dict[str, str] = {
-    "temperature": "Temperature",
-    "piece_counter": "Piece_Counter",
-    "machine_running": "Machine_Running",
-    "alarm_active": "Alarm_Active",
-}
-
-NODE_DEFINITIONS: dict[str, tuple[str, VariantType]] = {
-    tag_name: (
-        _DISPLAY_NAMES.get(tag_name, tag_name),
-        _TYPE_TO_VARIANT[str(config["data_type"])],
-    )
-    for tag_name, config in TAG_CONFIG.items()
-}
+NODE_DEFINITIONS: dict[str, tuple[str, VariantType]] = build_node_definitions(
+    _DEFAULT_VARIABLE_MAPPINGS
+)
 
 _DEFAULT_VALUES: dict[VariantType, object] = {
     VariantType.Float: 0.0,
@@ -47,11 +33,17 @@ __all__ = ["BAD_STATUS_CODE", "NAMESPACE_URI", "NODE_DEFINITIONS", "OPCUAGateway
 
 
 class OPCUAGateway:
-    def __init__(self, endpoint: str = "opc.tcp://0.0.0.0:4840/arduino/gateway"):
+    def __init__(
+        self,
+        endpoint: str = "opc.tcp://0.0.0.0:4840/arduino/gateway",
+        variable_mappings: dict[str, dict[str, int | str]] | None = None,
+    ):
         self.endpoint = endpoint
         self._server = Server()
         self._ns_idx: int = 0
         self._nodes: dict[str, Node] = {}
+        self.variable_mappings = variable_mappings or _DEFAULT_VARIABLE_MAPPINGS
+        self.node_definitions = build_node_definitions(self.variable_mappings)
 
     async def init(self) -> None:
         await self._server.init()
@@ -71,7 +63,7 @@ class OPCUAGateway:
         plc_node = await industrial_unit.add_object(self._ns_idx, "S7_PLC_1")
         logger.info("Node 'S7_PLC_1' created.")
 
-        for data_key, (node_name, variant_type) in NODE_DEFINITIONS.items():
+        for data_key, (node_name, variant_type) in self.node_definitions.items():
             initial_value = _DEFAULT_VALUES.get(variant_type, 0)
             var_node = await plc_node.add_variable(
                 self._ns_idx,
@@ -103,7 +95,7 @@ class OPCUAGateway:
                     SourceTimestamp=now,
                 )
             else:
-                _, variant_type = NODE_DEFINITIONS[data_key]
+                _, variant_type = self.node_definitions[data_key]
                 dv = DataValue(
                     Value=Variant(value, variant_type),
                     StatusCode_=StatusCode(ua.UInt32(ua.StatusCodes.Good)),

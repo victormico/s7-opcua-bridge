@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark light" />
+    <title>S7 OPC UA Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero card">
+        <div>
+          <p class="eyebrow">Zero-Code Gateway Dashboard</p>
+          <h1>Configure PLC mappings without editing Python</h1>
+          <p class="muted">
+            Discover S7 tags, map them to friendly names, save the gateway config,
+            and keep an eye on PLC and OPC UA health.
+          </p>
+        </div>
+        <div class="status-panel">
+          <div class="status-item">
+            <span class="status-label">PLC</span>
+            <span id="plcStatus" class="pill pill-warn">Unknown</span>
+          </div>
+          <div class="status-item">
+            <span class="status-label">OPC UA</span>
+            <span id="opcuaStatus" class="pill pill-warn">Unknown</span>
+          </div>
+          <div class="status-item compact">
+            <span class="status-label">Last update</span>
+            <span id="lastStatus" class="muted">—</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="grid">
+        <article class="card">
+          <div class="card-header">
+            <h2>Gateway API</h2>
+            <button id="saveApiBase" class="ghost-button" type="button">Save</button>
+          </div>
+          <label class="field">
+            <span>API Base URL</span>
+            <input id="apiBaseUrl" type="url" placeholder="http://localhost:8080" />
+          </label>
+          <div class="hint">Used by the dashboard to call discovery, config save, and status.</div>
+        </article>
+
+        <article class="card">
+          <div class="card-header">
+            <h2>PLC Settings</h2>
+            <div class="button-row">
+              <button id="discoverBtn" class="primary-button" type="button">Discover</button>
+              <button id="refreshStatusBtn" class="ghost-button" type="button">Refresh status</button>
+            </div>
+          </div>
+          <div class="form-grid">
+            <label class="field">
+              <span>PLC IP</span>
+              <input id="plcHost" type="text" placeholder="192.168.0.10" />
+            </label>
+            <label class="field">
+              <span>Rack</span>
+              <input id="plcRack" type="number" min="0" value="0" />
+            </label>
+            <label class="field">
+              <span>Slot</span>
+              <input id="plcSlot" type="number" min="0" value="1" />
+            </label>
+            <label class="field">
+              <span>PLC Port</span>
+              <input id="plcPort" type="number" min="1" value="102" />
+            </label>
+            <label class="field">
+              <span>DB Number</span>
+              <input id="dbNumber" type="number" min="1" value="1" />
+            </label>
+            <label class="field">
+              <span>OPC UA Port</span>
+              <input id="opcuaPort" type="number" min="1" value="4840" />
+            </label>
+          </div>
+        </article>
+      </section>
+
+      <section class="card">
+        <div class="card-header">
+          <div>
+            <h2>Variable Mapping</h2>
+            <p class="muted">Select the variables you want to expose and rename them for the OPC UA server.</p>
+          </div>
+          <button id="saveConfigBtn" class="primary-button" type="button">Save config</button>
+        </div>
+
+        <div id="messageBar" class="message" hidden></div>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Use</th>
+                <th>Tag</th>
+                <th>Friendly name</th>
+                <th>Type</th>
+                <th>DB</th>
+                <th>Byte</th>
+                <th>Bit</th>
+              </tr>
+            </thead>
+            <tbody id="variablesBody">
+              <tr class="empty-row">
+                <td colspan="7">Discover variables from the PLC to begin.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <template id="variableRowTemplate">
+      <tr>
+        <td><input type="checkbox" class="row-enabled" checked /></td>
+        <td class="tag-name"></td>
+        <td><input type="text" class="row-display-name" /></td>
+        <td class="row-type"></td>
+        <td class="row-db"></td>
+        <td class="row-byte"></td>
+        <td class="row-bit"></td>
+      </tr>
+    </template>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

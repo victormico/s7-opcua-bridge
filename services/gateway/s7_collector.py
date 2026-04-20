@@ -10,15 +10,18 @@ from typing import Any
 import snap7
 from snap7.error import S7Error
 
-from .tag_config import TAG_CONFIG
+from .config import get_variable_mappings, load_gateway_config
 
 logger = logging.getLogger("s7_collector")
 
 DB_NUMBER = 1
+_DEFAULT_CONFIG = load_gateway_config()
+DEFAULT_VARIABLE_MAPPINGS = get_variable_mappings(_DEFAULT_CONFIG)
 
 __all__ = [
     "DB_NUMBER",
     "DB1_READ_SIZE",
+    "DEFAULT_VARIABLE_MAPPINGS",
     "S7Collector",
     "connect_with_retry",
     "get_bit",
@@ -41,19 +44,31 @@ def _tag_size_bytes(config: dict[str, int | str]) -> int:
 
 
 DB1_READ_SIZE = max(
-    int(config["byte_offset"]) + _tag_size_bytes(config)
-    for config in TAG_CONFIG.values()
-)
+    int(config.get("byte_offset", 0)) + _tag_size_bytes(config)
+    for config in DEFAULT_VARIABLE_MAPPINGS.values()
+) if DEFAULT_VARIABLE_MAPPINGS else 0
 
 
 class S7Collector:
-    def __init__(self, host: str, rack: int = 0, slot: int = 1, port: int = 102):
+    def __init__(
+        self,
+        host: str,
+        rack: int = 0,
+        slot: int = 1,
+        port: int = 102,
+        variable_mappings: dict[str, dict[str, int | str]] | None = None,
+    ):
         self.host = host
         self.rack = rack
         self.slot = slot
         self.port = port
         self._client: snap7.client.Client | None = None
-        self.data: dict[str, Any] = {key: None for key in TAG_CONFIG}
+        self.variable_mappings = variable_mappings or DEFAULT_VARIABLE_MAPPINGS
+        self.data: dict[str, Any] = {key: None for key in self.variable_mappings}
+        self.read_size = max(
+            int(config.get("byte_offset", 0)) + _tag_size_bytes(config)
+            for config in self.variable_mappings.values()
+        ) if self.variable_mappings else 0
         self._running = False
         self._connected = False
 
@@ -91,10 +106,10 @@ class S7Collector:
         try:
             raw = await asyncio.get_running_loop().run_in_executor(
                 None,
-                lambda: self._client.db_read(DB_NUMBER, 0, DB1_READ_SIZE),
+                lambda: self._client.db_read(DB_NUMBER, 0, self.read_size),
             )
 
-            for tag_name, config in TAG_CONFIG.items():
+            for tag_name, config in self.variable_mappings.items():
                 byte_offset = int(config["byte_offset"])
                 data_type = str(config["data_type"])
 
