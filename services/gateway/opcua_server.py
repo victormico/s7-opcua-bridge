@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import inspect
 import logging
 from typing import Any
 
@@ -28,6 +29,15 @@ _DEFAULT_VALUES: dict[VariantType, object] = {
 }
 
 BAD_STATUS_CODE = ua.UInt32(ua.StatusCodes.BadNoData)
+
+# asyncua renamed the DataValue status-code kwarg across versions
+# (``StatusCode_`` in some, ``StatusCode`` in others — e.g. the UNO Q's newer
+# build). Detect it once so update_nodes works regardless of installed version.
+_STATUS_KW = (
+    "StatusCode_"
+    if "StatusCode_" in inspect.signature(DataValue.__init__).parameters
+    else "StatusCode"
+)
 
 __all__ = ["BAD_STATUS_CODE", "NAMESPACE_URI", "NODE_DEFINITIONS", "OPCUAGateway"]
 
@@ -91,15 +101,15 @@ class OPCUAGateway:
 
             if value is None:
                 dv = DataValue(
-                    StatusCode_=StatusCode(BAD_STATUS_CODE),
                     SourceTimestamp=now,
+                    **{_STATUS_KW: StatusCode(BAD_STATUS_CODE)},
                 )
             else:
                 _, variant_type = self.node_definitions[data_key]
                 dv = DataValue(
                     Value=Variant(value, variant_type),
-                    StatusCode_=StatusCode(ua.UInt32(ua.StatusCodes.Good)),
                     SourceTimestamp=now,
+                    **{_STATUS_KW: StatusCode(ua.UInt32(ua.StatusCodes.Good))},
                 )
 
             await node.write_value(dv)

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import os
@@ -9,25 +8,16 @@ from aiohttp import web
 
 from ..s7_simulator.tag_config import TAG_CONFIG as SIMULATOR_TAG_CONFIG
 from .config import get_config_path, get_variable_mappings, load_gateway_config
+from .status import (
+    GATEWAY_STATUS,
+    set_config_reload_event,
+    trigger_config_reload,
+    update_status,
+)
 
 logger = logging.getLogger("gateway_api")
 
 routes = web.RouteTableDef()
-GATEWAY_STATUS: dict[str, object] = {
-    "plc_connected": False,
-    "opcua_running": False,
-    "last_error": None,
-}
-_CONFIG_RELOAD_EVENT: asyncio.Event | None = None
-
-
-def set_config_reload_event(event: asyncio.Event | None) -> None:
-    global _CONFIG_RELOAD_EVENT
-    _CONFIG_RELOAD_EVENT = event
-
-
-def update_status(**values: object) -> None:
-    GATEWAY_STATUS.update(values)
 
 
 @web.middleware
@@ -80,8 +70,7 @@ async def save_config(request):
     config = await request.json()
     path = get_config_path()
     path.write_text(json.dumps(config, indent=2), encoding="utf-8")
-    if _CONFIG_RELOAD_EVENT is not None:
-        _CONFIG_RELOAD_EVENT.set()
+    trigger_config_reload()
     return web.json_response({"status": "ok", "path": str(path)})
 
 # Status endpoint

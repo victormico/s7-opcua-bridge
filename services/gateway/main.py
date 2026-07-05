@@ -8,11 +8,12 @@ import json
 import logging
 import os
 import signal
-from pathlib import Path
+import threading
+from typing import Callable
 
 
 from .opcua_server import OPCUAGateway
-from .gateway_api import set_config_reload_event, start_api, stop_api, update_status
+from .status import set_config_reload_event, update_status
 from .config import get_config_path, get_plc_settings, get_variable_mappings, load_gateway_config
 from .s7_collector import S7Collector, connect_with_retry
 
@@ -51,17 +52,19 @@ async def bridge_loop(
     gateway: OPCUAGateway,
     interval: float = READ_INTERVAL,
     reload_event: asyncio.Event | None = None,
+    stop_event: threading.Event | None = None,
+    on_cycle: Callable[[S7Collector], None] | None = None,
 ) -> None:
     collector._running = True
     logger.info("Bridge loop started (interval=%.1f s).", interval)
 
-    while True:
+    while not (stop_event is not None and stop_event.is_set()):
         if reload_event is not None and reload_event.is_set():
             raise RuntimeError("Config reload requested")
 
         if not collector._connected:
             logger.warning("PLC disconnected. Attempting to reconnect...")
-            await connect_with_retry(collector, delay=5.0)
+            await connect_with_retry(collector, delay=5.0, stop_event=stop_event)
             update_status(plc_connected=collector._connected)
 
         await collector.read_db1()
@@ -71,6 +74,13 @@ async def bridge_loop(
             opcua_running=True,
             last_error=None,
         )
+
+        if on_cycle is not None:
+            try:
+                on_cycle(collector)
+            except Exception:  # a status-sink failure must never kill the bridge
+                logger.exception("on_cycle hook raised; continuing bridge loop")
+
         await asyncio.sleep(interval)
 
 
@@ -80,52 +90,61 @@ async def main(
     plc_rack: int | None = None,
     plc_slot: int | None = None,
     opcua_port: int | None = None,
+    *,
+    manage_signals: bool = True,
+    start_http_api: bool = True,
+    stop_event: threading.Event | None = None,
+    on_cycle: Callable[[S7Collector], None] | None = None,
 ) -> None:
-    config = _load_config()
-    plc_config = get_plc_settings(config)
-    variable_mappings = get_variable_mappings(config)
+    """Run the gateway.
 
-    plc_host = plc_host or os.getenv("PLC_IP") or str(plc_config.get("host", _default_plc_host()))
-    plc_port = (
-        plc_port
-        if plc_port is not None
-        else _default_int("PLC_PORT", int(plc_config.get("port", 1102)))
-    )
-    plc_rack = (
-        plc_rack
-        if plc_rack is not None
-        else _default_int("PLC_RACK", int(plc_config.get("rack", 0)))
-    )
-    plc_slot = (
-        plc_slot
-        if plc_slot is not None
-        else _default_int("PLC_SLOT", int(plc_config.get("slot", 1)))
-    )
+    Docker/CLI use the defaults (POSIX signal handling + the aiohttp REST API).
+    Arduino App Lab runs this in a background thread and passes
+    ``manage_signals=False`` (signals only work on the main thread),
+    ``start_http_api=False`` (the WebUI Brick replaces the REST API), a
+    ``stop_event`` for cooperative shutdown, and an ``on_cycle`` hook to forward
+    status to the microcontroller over the Bridge.
+    """
+    config = _load_config()
+
     opcua_port = (
         opcua_port
         if opcua_port is not None
         else _default_int("OPCUA_PORT", int(config.get("opcua_port", 4840)))
     )
+    # Note: plc_host/port/rack/slot are intentionally NOT resolved to concrete
+    # values here. The CLI always passes concrete args (so Docker is unchanged),
+    # while App Lab passes None and lets the reload loop below re-read them from
+    # config on every reload — so the dashboard can repoint the PLC live.
 
     opcua_endpoint = f"opc.tcp://0.0.0.0:{opcua_port}/arduino/gateway"
     loop = asyncio.get_running_loop()
-    api_runner = await start_api()
     current_collector: S7Collector | None = None
 
-    def _shutdown(sig: signal.Signals) -> None:
-        logger.info("Signal %s received. Stopping bridge...", sig.name)
-        if current_collector is not None:
-            current_collector.stop()
-        for task in asyncio.all_tasks(loop):
-            task.cancel()
+    start_api = stop_api = None
+    api_runner = None
+    if start_http_api:
+        from .gateway_api import start_api, stop_api
 
-    for sig in (signal.SIGINT, signal.SIGTERM):
-        loop.add_signal_handler(sig, _shutdown, sig)
+        api_runner = await start_api()
+
+    if manage_signals:
+        def _shutdown(sig: signal.Signals) -> None:
+            logger.info("Signal %s received. Stopping bridge...", sig.name)
+            if current_collector is not None:
+                current_collector.stop()
+            for task in asyncio.all_tasks(loop):
+                task.cancel()
+
+        for sig in (signal.SIGINT, signal.SIGTERM):
+            loop.add_signal_handler(sig, _shutdown, sig)
 
     try:
-        while True:
+        while not (stop_event is not None and stop_event.is_set()):
             config_reload_event = asyncio.Event()
-            set_config_reload_event(config_reload_event)
+            # Pass the running loop so a WebUI handler on another thread can fire
+            # the reload event safely (via call_soon_threadsafe).
+            set_config_reload_event(config_reload_event, loop=loop)
 
             config = _load_config()
             plc_config = get_plc_settings(config)
@@ -155,6 +174,8 @@ async def main(
                         gateway,
                         interval=READ_INTERVAL,
                         reload_event=config_reload_event,
+                        stop_event=stop_event,
+                        on_cycle=on_cycle,
                     )
             except RuntimeError as exc:
                 if str(exc) != "Config reload requested":
@@ -168,7 +189,9 @@ async def main(
         logger.info("Bridge stopped cleanly.")
     finally:
         set_config_reload_event(None)
-        await stop_api(api_runner)
+        if stop_api is not None:
+            await stop_api(api_runner)
+        logger.info("Bridge stopped.")
 
 
 def _parse_args() -> argparse.Namespace:

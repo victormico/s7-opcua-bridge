@@ -1,0 +1,5 @@
+# Python dependencies for the gateway. Installed automatically by App Lab on
+# first run. The web UI is provided by the arduino:web_ui Brick, so no HTTP
+# framework is needed here.
+python-snap7>=3.0.0
+asyncua>=1.1.0

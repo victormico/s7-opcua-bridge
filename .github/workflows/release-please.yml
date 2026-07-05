@@ -1,0 +1,44 @@
+name: Release
+
+# Automated releases with release-please. On each push to main it maintains a
+# "release PR" whose version is derived from Conventional Commit messages
+# (feat: -> minor, fix: -> patch, feat!/BREAKING CHANGE -> major). Merging that
+# PR creates the git tag + GitHub Release. We then build the versioned App Lab
+# zip and attach it to that release — all in one job, so no PAT is needed
+# (a tag pushed via GITHUB_TOKEN would not trigger a separate workflow).
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write # create releases + tags
+  pull-requests: write # maintain the release PR
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+
+      # The steps below only run on the push that merges the release PR, i.e.
+      # when a release was actually created. In manifest mode the per-package
+      # outputs are path-prefixed (root package is ".").
+      - uses: actions/checkout@v4
+        if: ${{ steps.release.outputs.releases_created }}
+
+      - uses: actions/setup-python@v5
+        if: ${{ steps.release.outputs.releases_created }}
+        with:
+          python-version: "3.12"
+
+      - name: Build and attach versioned App Lab zip
+        if: ${{ steps.release.outputs.releases_created }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.release.outputs['.--version'] }}
+          TAG: ${{ steps.release.outputs['.--tag_name'] }}
+        run: |
+          out="dist/s7-opcua-gateway-applab-${VERSION}.zip"
+          python scripts/build_applab_zip.py "$out"
+          gh release upload "$TAG" "$out"
