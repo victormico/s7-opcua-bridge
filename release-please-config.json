@@ -3,6 +3,14 @@
   "release-type": "simple",
   "include-component-in-tag": false,
   "packages": {
-    ".": {}
+    ".": {
+      "extra-files": [
+        {
+          "type": "yaml",
+          "path": "app/app.yaml",
+          "jsonpath": "$.version"
+        }
+      ]
+    }
   }
 }
