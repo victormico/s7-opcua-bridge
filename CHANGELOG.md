@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.2.1](https://github.com/victormico/s7-opcua-bridge/compare/v0.2.0...v0.2.1) (2026-07-05)
+
+
+### Bug Fixes
+
+* **ci:** use root-package release-please outputs to attach release zip ([8ed919e](https://github.com/victormico/s7-opcua-bridge/commit/8ed919ee10df1bcf930f545ff607a9db3d71c264))
+* **ci:** use root-package release-please outputs to attach release zip ([ff414bd](https://github.com/victormico/s7-opcua-bridge/commit/ff414bd190aefc72167d334f1b1d9e62493f663e))
+
 ## [0.2.0](https://github.com/victormico/s7-opcua-bridge/compare/v0.1.0...v0.2.0) (2026-07-05)
 
 
