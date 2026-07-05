@@ -29,7 +29,7 @@ python -m unittest discover -s tests -p "test_*.py" -v   # if pytest isn't insta
 # Preferred: build a self-contained zip and Import from ZIP in App Lab.
 python scripts/build_applab_zip.py            # -> dist/s7-opcua-gateway-applab.zip
 # Or run from a full repo checkout on the board:
-scp -r . arduino@gaudi:~/ArduinoApps/s7-opcua-bridge
+scp -r . arduino@<board-host>:~/ArduinoApps/s7-opcua-bridge
 arduino-app-cli app start ~/ArduinoApps/s7-opcua-bridge/app
 ```
 

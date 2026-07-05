@@ -56,39 +56,59 @@ microcontroller.
 
 ## Deploy and run
 
-### Option A — Import as a ZIP (App Lab GUI, recommended)
+Import the app as a ZIP through the App Lab GUI.
 
 An App Lab `.zip` must be a **single self-contained app** (`app.yaml` at the zip
 root). This app normally borrows the shared `services/` package from the repo,
 so a zip is produced by a build script that vendors those modules into
-`python/services/`:
+`python/services/`.
+
+For a released build, download the versioned zip from the repo's
+[**Releases**](../../releases) page (see [Releases](#releases-versioned-zips)
+below). To build one yourself:
 
 ```bash
 python scripts/build_applab_zip.py
 # -> dist/s7-opcua-gateway-applab.zip
+
+# ...or write to a specific (versioned) path:
+python scripts/build_applab_zip.py dist/s7-opcua-gateway-applab-1.2.0.zip
 ```
 
 Then in App Lab use **Import from ZIP** and pick that file. Do **not** zip the
 whole repository — App Lab expects one app, and a raw `app/` zip would be
 missing the gateway code.
 
-### Option B — CLI with the full repo checkout
-
-The app also runs straight from a full repo checkout (it finds `services/` at
-the repo root). The board is reachable as `arduino@gaudi`:
-
-```bash
-# Copy the whole repo to the board (services/ must come along)
-scp -r . arduino@gaudi:~/ArduinoApps/s7-opcua-bridge
-
-# Start / inspect / stop the app (started from the app/ subfolder)
-arduino-app-cli app start ~/ArduinoApps/s7-opcua-bridge/app
-arduino-app-cli app logs  ~/ArduinoApps/s7-opcua-bridge/app
-arduino-app-cli app stop  ~/ArduinoApps/s7-opcua-bridge/app
-```
-
 Python dependencies in `python/requirements.txt` are installed automatically on
 first run.
+
+## Releases (versioned zips)
+
+Releases are automated with GitHub Actions — **no manual git tagging**. Version
+numbers are derived from [Conventional Commit](https://www.conventionalcommits.org/)
+messages via [release-please](https://github.com/googleapis/release-please):
+
+- **`.github/workflows/build-applab.yml`** — on every pull request, builds the
+  App Lab zip to prove the build still works and uploads it as a run artifact.
+- **`.github/workflows/release-please.yml`** — on every push to `main`,
+  release-please maintains a **release PR** that bumps `version.txt` and updates
+  `CHANGELOG.md`. **Merging that release PR** tags the version, publishes a
+  **GitHub Release**, and attaches `s7-opcua-gateway-applab-<version>.zip`.
+
+How the version is chosen from your commits:
+
+| Commit type                          | Bump  |
+| ------------------------------------ | ----- |
+| `fix: ...`                           | patch |
+| `feat: ...`                          | minor |
+| `feat!: ...` / `BREAKING CHANGE:`    | major |
+
+So the workflow is just: **open PRs with Conventional Commit titles → merge to
+`main` → merge the release PR release-please opens.** The versioned zip appears
+on the [Releases](../../releases) page, ready to **Import from ZIP** in App Lab.
+
+(To force a specific version, add a `Release-As: 1.2.0` footer to a commit on
+`main`.)
 
 ## Try it
 
