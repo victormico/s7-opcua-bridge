@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import struct
+import threading
 from typing import Any
 
 import snap7
@@ -155,8 +156,16 @@ class S7Collector:
         self._running = False
 
 
-async def connect_with_retry(collector: "S7Collector", delay: float = 5.0) -> None:
-    while not collector._connected and collector._running:
+async def connect_with_retry(
+    collector: "S7Collector",
+    delay: float = 5.0,
+    stop_event: "threading.Event | None" = None,
+) -> None:
+    while (
+        not collector._connected
+        and collector._running
+        and not (stop_event is not None and stop_event.is_set())
+    ):
         logger.info("Attempting to connect to PLC %s...", collector.host)
         success = await collector.connect()
         if not success:

@@ -1,0 +1,14 @@
+name: S7 to OPC UA Gateway
+icon: 🏭
+description: Turn a Siemens S7 PLC into an OPC UA server, configured from a web dashboard, with live health on the microcontroller.
+version: "1.0.0"
+
+# The web_ui Brick serves the dashboard in assets/ and provides the Socket.IO
+# channel used by python/web_adapter.py (ui.on_message / ui.send_message).
+bricks:
+  - arduino:web_ui
+
+# Publish the OPC UA server port so external clients (e.g. UaExpert) can reach
+# the gateway. The web_ui Brick publishes its own HTTP port (7000).
+ports:
+  - 4840

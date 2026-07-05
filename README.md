@@ -7,6 +7,17 @@ An open-source edge gateway that reads data from Siemens S7 PLCs and exposes
 it through an OPC UA server. The project now supports both local IDE runs and
 containerized deployment so the simulator and gateway can be isolated cleanly.
 
+## Run on Arduino UNO Q (App Lab)
+
+The gateway is also packaged as a native **Arduino App Lab** app for the
+**UNO Q**, showcasing the board's dual-brain design: the S7 ⇄ OPC UA bridge and
+dashboard back-end run in Python on the Linux side, an MCU sketch drives an
+on-board status LED over the Router Bridge, and the `arduino:web_ui` Brick serves
+the dashboard. An embedded S7 simulator (toggle from the dashboard) makes it
+demoable with no PLC wired. The App Lab app reuses the same `services/gateway`
+code as the Docker stack — see **[`app/README.md`](app/README.md)** for the
+layout, LED status mapping, and deploy/run instructions.
+
 ## Visual Overview
 
 ### Data flow
