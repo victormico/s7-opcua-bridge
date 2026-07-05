@@ -22,22 +22,22 @@ jobs:
         id: release
 
       # The steps below only run on the push that merges the release PR, i.e.
-      # when a release was actually created. In manifest mode the per-package
-      # outputs are path-prefixed (root package is ".").
+      # when a release was actually created. For the root package (path ".")
+      # release-please exposes outputs WITHOUT a path prefix.
       - uses: actions/checkout@v4
-        if: ${{ steps.release.outputs.releases_created }}
+        if: ${{ steps.release.outputs.release_created }}
 
       - uses: actions/setup-python@v5
-        if: ${{ steps.release.outputs.releases_created }}
+        if: ${{ steps.release.outputs.release_created }}
         with:
           python-version: "3.12"
 
       - name: Build and attach versioned App Lab zip
-        if: ${{ steps.release.outputs.releases_created }}
+        if: ${{ steps.release.outputs.release_created }}
         env:
           GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ steps.release.outputs['.--version'] }}
-          TAG: ${{ steps.release.outputs['.--tag_name'] }}
+          VERSION: ${{ steps.release.outputs.version }}
+          TAG: ${{ steps.release.outputs.tag_name }}
         run: |
           out="dist/s7-opcua-gateway-applab-${VERSION}.zip"
           python scripts/build_applab_zip.py "$out"
