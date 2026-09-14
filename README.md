@@ -269,3 +269,9 @@ If the PLC loses its connection, the OPC UA server continues running and
 marks the affected nodes with a **Bad StatusCode** (`BadNoData`).
 Once the PLC reconnects, reads resume automatically and the nodes return
 to **Good** status.
+
+## License
+
+Released under the [MIT License](LICENSE) — free to use, modify and
+distribute, including commercially, as long as the copyright notice and
+license text are kept.
